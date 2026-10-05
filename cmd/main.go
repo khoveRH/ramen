@@ -104,6 +104,7 @@ func buildOptions(restCfg *rest.Config, ramenConfig *ramendrv1alpha1.RamenConfig
 		Metrics:                controllers.MetricsServerOptions(metricsAddr),
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       controllers.LeaderElectionResourceName(controllers.ControllerType),
+		Cache:                  controllers.CacheOptions(controllers.ControllerType),
 	}
 
 	c, err := client.New(restCfg, client.Options{Scheme: scheme})

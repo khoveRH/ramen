@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	configv1alpha1 "k8s.io/component-base/config/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -191,6 +192,35 @@ func MetricsServerOptions(bindAddress string) metricsserver.Options {
 		SecureServing:  true,
 		CertDir:        "/etc/metrics-certs",
 		FilterProvider: filters.WithAuthenticationAndAuthorization,
+	}
+}
+
+// CacheOptions returns informer cache options scoped to what the given
+// controller type actually reconciles against, to avoid caching cluster-wide
+// objects that are only ever filtered down to a single namespace in handlers.
+//
+// The hub controllers (DRPolicy, DRCluster) only ever act on Secrets living
+// in the operator's own namespace (see secretMapFunc / drClusterSecretMapFunc
+// filtering). Without this, the default informer cache lists/watches every
+// Secret in the cluster, which on a busy OCM hub is enough to OOM the
+// operator's memory limit before the caches even finish their initial sync.
+//
+// ConfigMap is deliberately left unrestricted here: DRPlacementControl
+// watches network-mapping ConfigMaps that can live in any application
+// namespace, so its cache can't be scoped to a single namespace.
+func CacheOptions(controllerType ramendrv1alpha1.ControllerType) cache.Options {
+	if controllerType != ramendrv1alpha1.DRHubType {
+		return cache.Options{}
+	}
+
+	return cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Secret{}: {
+				Namespaces: map[string]cache.Config{
+					RamenOperatorNamespace(): {},
+				},
+			},
+		},
 	}
 }
 
